@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мониторинг Пинга</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --text-color: #e0e0e0;
+            --card-bg: #2d2d2d;
+            --border-color: #444;
+            --accent-color: #4caf50;
+            --table-header-bg: #333;
+            --table-row-hover: #383838;
+            --scrollbar-bg: #3a3a3a;
+            --scrollbar-thumb: #666;
+            --scrollbar-thumb-hover: #888;
+            --footer-bg: #1a1a1a;
+            --footer-text: #888;
+            --footer-link: #4caf50;
+        }
+
+        body.light-mode {
+            --bg-color: #f4f4f4;
+            --text-color: #333333;
+            --card-bg: #ffffff;
+            --border-color: #ddd;
+            --accent-color: #2e7d32;
+            --table-header-bg: #eee;
+            --table-row-hover: #f9f9f9;
+            --scrollbar-bg: #e0e0e0;
+            --scrollbar-thumb: #bbb;
+            --scrollbar-thumb-hover: #999;
+            --footer-bg: #e8e8e8;
+            --footer-text: #666;
+            --footer-link: #2e7d32;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            flex-grow: 1;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        button:hover {
+            background-color: var(--border-color);
+        }
+        
+        button.zoom-btn {
+            font-weight: bold;
+            width: 40px;
+            padding: 8px 0;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            padding: 8px 16px;
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            background-color: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            flex-grow: 1;
+            cursor: grab;
+        }
+        
+        .chart-container:active {
+            cursor: grabbing;
+        }
+
+        .scrollbar-container {
+            width: 20px;
+            height: 400px;
+            background-color: var(--scrollbar-bg);
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .scrollbar-thumb {
+            width: 14px;
+            height: 50%;
+            background-color: var(--scrollbar-thumb);
+            border-radius: 7px;
+            position: absolute;
+            left: 3px;
+            top: 0;
+            cursor: grab;
+            transition: background-color 0.2s;
+        }
+
+        .scrollbar-thumb:hover {
+            background-color: var(--scrollbar-thumb-hover);
+        }
+
+        .scrollbar-thumb:active {
+            cursor: grabbing;
+        }
+
+        .scrollbar-label {
+            position: absolute;
+            left: 25px;
+            font-size: 0.7rem;
+            color: var(--text-color);
+            opacity: 0.7;
+            transform: translateY(-50%);
+            white-space: nowrap;
+        }
+
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .stats-table th, .stats-table td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-table th {
+            background-color: var(--table-header-bg);
+            font-weight: 600;
+        }
+        
+        .stats-table td:first-child {
+            font-weight: bold;
+            text-align: left;
+            background-color: rgba(0,0,0,0.05);
+        }
+        body.light-mode .stats-table td:first-child {
+             background-color: rgba(0,0,0,0.02);
+        }
+
+        .stats-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .stats-table tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .loss-val {
+            color: #ff5252;
+            font-weight: bold;
+        }
+        body.light-mode .loss-val {
+            color: #d32f2f;
+        }
+        
+        .hint {
+            font-size: 0.8rem;
+            color: var(--text-color);
+            opacity: 0.7;
+            margin-right: 10px;
+        }
+
+        .sample-badge {
+            background-color: #ff9800;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        /* Подвал */
+        footer {
+            background-color: var(--footer-bg);
+            padding: 20px;
+            margin-top: 40px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .footer-content {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .footer-text {
+            color: var(--footer-text);
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--footer-link);
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .footer-link:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+
+        .footer-divider {
+            color: var(--footer-text);
+            opacity: 0.5;
+        }
+
+        .ai-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 5px;
+            display: inline-block;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .ai-badge:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Мониторинг Пинга <span id="sampleBadge" class="sample-badge">Тестовые данные</span></h1>
+        <div class="controls">
+            <span class="hint">🖱 Колесико: Зум | 💡 Драг: Перемещение</span>
+            
+            <div style="display: flex; gap: 5px; border: 1px solid var(--border-color); border-radius: 4px; padding: 2px;">
+                <button class="zoom-btn" onclick="zoomGraphY(0.8)" title="Приблизить по вертикали">+</button>
+                <button class="zoom-btn" onclick="zoomGraphY(1.2)" title="Отдалить по вертикали">-</button>
+                <button class="zoom-btn" onclick="resetZoom()" title="Сброс масштаба">↺</button>
+            </div>
+
+            <button onclick="toggleTheme()" id="themeBtn">☀ Светлая тема</button>
+            <label for="csvFileInput" class="file-label">📂 Загрузить CSV</label>
+            <input type="file" id="csvFileInput" accept=".csv" onchange="handleFileUpload(this)">
+        </div>
+    </header>
+
+    <div class="chart-wrapper">
+        <div class="chart-container">
+            <canvas id="pingChart"></canvas>
+        </div>
+        <div class="scrollbar-container" id="scrollbarContainer">
+            <div class="scrollbar-thumb" id="scrollbarThumb"></div>
+            <span class="scrollbar-label" id="scrollbarMax" style="top: 0px;"></span>
+            <span class="scrollbar-label" id="scrollbarMin" style="bottom: 0px;"></span>
+        </div>
+    </div>
+
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th style="width: 30%;">Метрика</th>
+                <th>Cloudflare</th>
+                <th>Remote</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Минимальный (мс)</td>
+                <td id="cf-min">-</td>
+                <td id="rm-min">-</td>
+            </tr>
+            <tr>
+                <td>Максимальный (мс)</td>
+                <td id="cf-max">-</td>
+                <td id="rm-max">-</td>
+            </tr>
+            <tr>
+                <td>Средний (мс)</td>
+                <td id="cf-avg">-</td>
+                <td id="rm-avg">-</td>
+            </tr>
+            <tr>
+                <td>Потеря пакетов</td>
+                <td class="loss-val" id="cf-loss">0</td>
+                <td class="loss-val" id="rm-loss">0</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<footer>
+    <div class="footer-content">
+        <p class="footer-text">
+            Разработано под руководством 
+            <a href="https://github.com/user-is-absinthe" class="footer-link" target="_blank">
+                @user-is-absinthe
+            </a>
+            <span class="footer-divider">|</span>
+            Код писал
+            <a href="https://chat.qwen.ai/" class="ai-badge" target="_blank">Qwen 3.5-Plus</a>
+        </p>
+        <div class="footer-links">
+            <a href="https://github.com/user-is-absinthe/ping_analyzer" class="footer-link" target="_blank">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                GitHub Репозиторий
+            </a>
+        </div>
+    </div>
+</footer>
+
+<script>
+    let chartInstance = null;
+    let globalYMin = 0;
+    let globalYMax = 100;
+    let isSampleData = true;
+    
+    const sampleCSV = `date_time;ping_cloudflare;ping_remote
+2025-09-25 23:15:59;26.7;61.4
+2025-09-25 23:16:47;27.7;49.9
+2025-09-25 23:17:32;25.1;55.2
+2025-09-25 23:18:15;28.3;62.8
+2025-09-25 23:19:01;-1;58.1
+2025-09-25 23:19:48;26.9;125.4
+2025-09-25 23:20:33;27.2;67.3
+2025-09-25 23:21:19;25.8;59.6
+2025-09-25 23:22:05;29.1;-1
+2025-09-25 23:22:51;26.4;63.2`;
+
+    let isDraggingScrollbar = false;
+    let scrollbarStartY = 0;
+    let scrollbarStartTop = 0;
+
+    function toggleTheme() {
+        document.body.classList.toggle('light-mode');
+        const btn = document.getElementById('themeBtn');
+        if (document.body.classList.contains('light-mode')) {
+            btn.textContent = '🌙 Темная тема';
+        } else {
+            btn.textContent = '☀ Светлая тема';
+        }
+        if (chartInstance) updateChartColors();
+    }
+
+    function handleFileUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            isSampleData = false;
+            document.getElementById('sampleBadge').style.display = 'none';
+            parseCSV(text);
+        };
+        reader.readAsText(file);
+    }
+
+    function parseCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        const labels = [];
+        const dataCloudflare = [];
+        const dataRemote = [];
+        
+        let cfMin = Infinity, cfMax = -Infinity, cfSum = 0, cfCount = 0, cfLoss = 0;
+        let rmMin = Infinity, rmMax = -Infinity, rmSum = 0, rmCount = 0, rmLoss = 0;
+        
+        let absoluteMin = Infinity;
+        let absoluteMax = -Infinity;
+
+        for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(';');
+            if (parts.length < 3) continue;
+
+            const date = parts[0];
+            const pingCF = parseFloat(parts[1]);
+            const pingRM = parseFloat(parts[2]);
+
+            labels.push(date);
+            dataCloudflare.push(pingCF);
+            dataRemote.push(pingRM);
+
+            if (pingCF !== -1) {
+                if (pingCF < absoluteMin) absoluteMin = pingCF;
+                if (pingCF > absoluteMax) absoluteMax = pingCF;
+            }
+            if (pingRM !== -1) {
+                if (pingRM < absoluteMin) absoluteMin = pingRM;
+                if (pingRM > absoluteMax) absoluteMax = pingRM;
+            }
+
+            if (pingCF !== -1) {
+                if (pingCF < cfMin) cfMin = pingCF;
+                if (pingCF > cfMax) cfMax = pingCF;
+                cfSum += pingCF;
+                cfCount++;
+            } else {
+                cfLoss++;
+            }
+
+            if (pingRM !== -1) {
+                if (pingRM < rmMin) rmMin = pingRM;
+                if (pingRM > rmMax) rmMax = pingRM;
+                rmSum += pingRM;
+                rmCount++;
+            } else {
+                rmLoss++;
+            }
+        }
+
+        const range = absoluteMax - absoluteMin;
+        globalYMin = absoluteMin - (range * 0.1);
+        globalYMax = absoluteMax + (range * 0.1);
+        
+        if (globalYMin < 0) globalYMin = 0;
+
+        updateStats(cfMin, cfMax, cfSum, cfCount, cfLoss, rmMin, rmMax, rmSum, rmCount, rmLoss);
+        renderChart(labels, dataCloudflare, dataRemote);
+        updateScrollbar();
+    }
+
+    function updateStats(cfMin, cfMax, cfSum, cfCount, cfLoss, rmMin, rmMax, rmSum, rmCount, rmLoss) {
+        document.getElementById('cf-min').textContent = cfMin === Infinity ? 'N/A' : cfMin.toFixed(1);
+        document.getElementById('cf-max').textContent = cfMax === -Infinity ? 'N/A' : cfMax.toFixed(1);
+        document.getElementById('cf-avg').textContent = cfCount > 0 ? (cfSum / cfCount).toFixed(1) : 'N/A';
+        document.getElementById('cf-loss').textContent = cfLoss;
+
+        document.getElementById('rm-min').textContent = rmMin === Infinity ? 'N/A' : rmMin.toFixed(1);
+        document.getElementById('rm-max').textContent = rmMax === -Infinity ? 'N/A' : rmMax.toFixed(1);
+        document.getElementById('rm-avg').textContent = rmCount > 0 ? (rmSum / rmCount).toFixed(1) : 'N/A';
+        document.getElementById('rm-loss').textContent = rmLoss;
+    }
+
+    function renderChart(labels, dataCF, dataRM) {
+        const ctx = document.getElementById('pingChart').getContext('2d');
+        const isLight = document.body.classList.contains('light-mode');
+        const gridColor = isLight ? '#ddd' : '#444';
+        const textColor = isLight ? '#333' : '#e0e0e0';
+
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Cloudflare',
+                        data: dataCF,
+                        borderColor: '#4caf50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                        tension: 0.1,
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Remote',
+                        data: dataRM,
+                        borderColor: '#2196f3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                        tension: 0.1,
+                        pointRadius: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        min: globalYMin,
+                        max: globalYMax,
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            color: textColor,
+                            maxRotation: 45,
+                            autoSkip: true,
+                            maxTicksLimit: 20 
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: textColor }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                            modifierKey: null,
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy',
+                            onZoomComplete: function() {
+                                updateScrollbar();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChartColors() {
+        if (chartInstance) {
+            const isLight = document.body.classList.contains('light-mode');
+            const gridColor = isLight ? '#ddd' : '#444';
+            const textColor = isLight ? '#333' : '#e0e0e0';
+            
+            chartInstance.options.scales.y.grid.color = gridColor;
+            chartInstance.options.scales.y.ticks.color = textColor;
+            chartInstance.options.scales.x.ticks.color = textColor;
+            chartInstance.options.plugins.legend.labels.color = textColor;
+            chartInstance.update();
+        }
+    }
+
+    function zoomGraphY(factor) {
+        if (!chartInstance) return;
+
+        const yScale = chartInstance.scales.y;
+        const min = yScale.min;
+        const max = yScale.max;
+        const range = max - min;
+        const center = min + (range / 2);
+
+        const newRange = range * factor;
+        let newMin = center - (newRange / 2);
+        let newMax = center + (newRange / 2);
+
+        if (newMin < globalYMin) {
+            newMin = globalYMin;
+            newMax = globalYMin + newRange;
+        }
+        if (newMax > globalYMax) {
+            newMax = globalYMax;
+            newMin = globalYMax - newRange;
+        }
+
+        chartInstance.options.scales.y.min = newMin;
+        chartInstance.options.scales.y.max = newMax;
+        
+        chartInstance.update();
+        updateScrollbar();
+    }
+
+    function resetZoom() {
+        if (!chartInstance) return;
+        chartInstance.options.scales.y.min = globalYMin;
+        chartInstance.options.scales.y.max = globalYMax;
+        chartInstance.resetZoom();
+        chartInstance.update();
+        updateScrollbar();
+    }
+
+    function updateScrollbar() {
+        if (!chartInstance) return;
+
+        const yScale = chartInstance.scales.y;
+        const currentMin = yScale.min;
+        const currentMax = yScale.max;
+        const currentRange = currentMax - currentMin;
+        const globalRange = globalYMax - globalYMin;
+
+        const scrollbarContainer = document.getElementById('scrollbarContainer');
+        const scrollbarThumb = document.getElementById('scrollbarThumb');
+        const scrollbarMaxLabel = document.getElementById('scrollbarMax');
+        const scrollbarMinLabel = document.getElementById('scrollbarMin');
+
+        const containerHeight = scrollbarContainer.offsetHeight;
+
+        const thumbHeightPercent = (currentRange / globalRange) * 100;
+        const thumbHeight = Math.max(20, (thumbHeightPercent / 100) * containerHeight);
+
+        const positionPercent = (currentMin - globalYMin) / (globalRange - currentRange);
+        const thumbTop = positionPercent * (containerHeight - thumbHeight);
+
+        scrollbarThumb.style.height = thumbHeight + 'px';
+        scrollbarThumb.style.top = thumbTop + 'px';
+
+        scrollbarMaxLabel.textContent = Math.round(currentMax) + ' мс';
+        scrollbarMinLabel.textContent = Math.round(currentMin) + ' мс';
+        scrollbarMaxLabel.style.top = '10px';
+        scrollbarMinLabel.style.bottom = '10px';
+        scrollbarMinLabel.style.top = 'auto';
+    }
+
+    const scrollbarContainer = document.getElementById('scrollbarContainer');
+    const scrollbarThumb = document.getElementById('scrollbarThumb');
+
+    scrollbarContainer.addEventListener('mousedown', function(e) {
+        if (e.target === scrollbarThumb) return;
+        
+        const containerHeight = scrollbarContainer.offsetHeight;
+        const thumbHeight = scrollbarThumb.offsetHeight;
+        const clickY = e.clientY - scrollbarContainer.getBoundingClientRect().top;
+        
+        const globalRange = globalYMax - globalYMin;
+        const currentRange = chartInstance.scales.y.max - chartInstance.scales.y.min;
+        const availableScroll = globalRange - currentRange;
+        
+        if (availableScroll <= 0) return;
+
+        const positionPercent = (clickY - thumbHeight / 2) / (containerHeight - thumbHeight);
+        const clampedPercent = Math.max(0, Math.min(1, positionPercent));
+        
+        const newMin = globalYMin + (clampedPercent * availableScroll);
+        const newMax = newMin + currentRange;
+
+        chartInstance.options.scales.y.min = newMin;
+        chartInstance.options.scales.y.max = newMax;
+        chartInstance.update();
+        updateScrollbar();
+    });
+
+    scrollbarThumb.addEventListener('mousedown', function(e) {
+        isDraggingScrollbar = true;
+        scrollbarStartY = e.clientY;
+        scrollbarStartTop = parseFloat(scrollbarThumb.style.top) || 0;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDraggingScrollbar || !chartInstance) return;
+
+        const deltaY = e.clientY - scrollbarStartY;
+        const containerHeight = scrollbarContainer.offsetHeight;
+        const thumbHeight = scrollbarThumb.offsetHeight;
+        const newTop = Math.max(0, Math.min(containerHeight - thumbHeight, scrollbarStartTop + deltaY));
+
+        const globalRange = globalYMax - globalYMin;
+        const currentRange = chartInstance.scales.y.max - chartInstance.scales.y.min;
+        const availableScroll = globalRange - currentRange;
+
+        if (availableScroll <= 0) return;
+
+        const positionPercent = newTop / (containerHeight - thumbHeight);
+        const newMin = globalYMin + (positionPercent * availableScroll);
+        const newMax = newMin + currentRange;
+
+        chartInstance.options.scales.y.min = newMin;
+        chartInstance.options.scales.y.max = newMax;
+        chartInstance.update();
+        updateScrollbar();
+    });
+
+    document.addEventListener('mouseup', function() {
+        isDraggingScrollbar = false;
+    });
+
+    Chart.defaults.plugins.zoom.pan.onPanComplete = function() {
+        updateScrollbar();
+    };
+
+    window.addEventListener('DOMContentLoaded', function() {
+        parseCSV(sampleCSV);
+    });
+</script>
+
+</body>
+</html>
